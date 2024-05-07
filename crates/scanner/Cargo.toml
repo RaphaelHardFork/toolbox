@@ -5,11 +5,16 @@ edition = "2021"
 
 
 [dependencies]
-serde = { version = "1.0.200", features = ["derive"] }
-rayon = "1.10.0"
-derive_more = { version = "0.99.17", features = ["from"] }
+# -- resolve DNS
 hickory-resolver = "0.24.1"
+# -- Multithreading
+rayon = "1.10.0"
+# -- Http requests
 ureq = { version = "2.9.7", features = ["json"] }
+# -- Json
+serde = { version = "1.0.200", features = ["derive"] }
+# -- Utils
+derive_more = { version = "0.99.17", features = ["from"] }
 
 [lints]
 workspace = true
