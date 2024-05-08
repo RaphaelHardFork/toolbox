@@ -9,6 +9,7 @@ use ureq::Agent;
 use crate::{
     error::Result,
     model::{CrtShEntry, Subdomain},
+    RESOLVE_DNS_TIMEOUT_MS,
 };
 
 pub fn enumerate(agent: &Agent, target: &str) -> Result<Vec<Subdomain>> {
@@ -49,7 +50,7 @@ pub fn enumerate(agent: &Agent, target: &str) -> Result<Vec<Subdomain>> {
 
 pub fn resolves(domain: &Subdomain) -> bool {
     let mut opts = ResolverOpts::default();
-    opts.timeout = Duration::from_millis(4000);
+    opts.timeout = Duration::from_millis(RESOLVE_DNS_TIMEOUT_MS);
 
     let dns_resolver = Resolver::new(ResolverConfig::default(), opts)
         // panic if the DNS client fail to build

@@ -9,8 +9,14 @@ mod model;
 mod ports;
 mod subdomains;
 
+// global timeouts
+const HTTP_REQUEST_TIMEOUT_MS: u64 = 10000;
+pub const SOCKET_CON_TIMEOUT_MS: u64 = 3000;
+pub const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
+
 fn main() -> Result<()> {
     // collect and validate args
+
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         return Err(error::Error::CliUsage(
@@ -21,7 +27,7 @@ fn main() -> Result<()> {
 
     // request crt.sh
     let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_millis(10000))
+        .timeout(Duration::from_millis(HTTP_REQUEST_TIMEOUT_MS))
         .build();
 
     let pool = rayon::ThreadPoolBuilder::new().num_threads(256).build()?;

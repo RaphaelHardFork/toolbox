@@ -5,7 +5,10 @@ use std::{
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::model::{Port, Subdomain};
+use crate::{
+    model::{Port, Subdomain},
+    SOCKET_CON_TIMEOUT_MS,
+};
 
 pub const MOST_COMMON_PORTS_100: &[u16] = &[
     80, 23, 443, 21, 22, 25, 3389, 110, 445, 139, 143, 53, 135, 3306, 8080, 1723, 111, 995, 993,
@@ -37,7 +40,7 @@ pub fn scan_ports(mut subdomain: Subdomain) -> Subdomain {
 }
 
 pub fn scan_port(mut socket_address: SocketAddr, port: u16) -> Port {
-    let timeout = Duration::from_millis(3000);
+    let timeout = Duration::from_millis(SOCKET_CON_TIMEOUT_MS);
     socket_address.set_port(port);
 
     let is_open = if TcpStream::connect_timeout(&socket_address, timeout).is_ok() {
