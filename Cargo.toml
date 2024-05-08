@@ -4,4 +4,4 @@ unsafe_code = "forbid"
 
 [workspace]
 resolver = "2"
-members = ["crates/scanner", "crates/sha1-cracker"]
+members = [ "crates/async-scanner","crates/scanner", "crates/sha1-cracker"]
