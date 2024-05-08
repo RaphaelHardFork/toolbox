@@ -32,7 +32,7 @@ fn main() -> Result<()> {
             .collect();
 
         for subdomain in scan_result {
-            println!("Subdomain: {}", &subdomain.domain);
+            println!("Open ports on subdomain: {}", &subdomain.domain);
             for port in &subdomain.open_ports {
                 println!("{}", port.port)
             }

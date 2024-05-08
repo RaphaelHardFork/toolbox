@@ -3,6 +3,8 @@ use std::{
     time::Duration,
 };
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use crate::model::{Port, Subdomain};
 
 pub const MOST_COMMON_PORTS_100: &[u16] = &[
@@ -15,7 +17,7 @@ pub const MOST_COMMON_PORTS_100: &[u16] = &[
 ];
 
 pub fn scan_ports(mut subdomain: Subdomain) -> Subdomain {
-    println!("Scan port for {:?}", &subdomain.domain);
+    println!("Scanning ports for {:?}", &subdomain.domain);
     let socket_addresses: Vec<SocketAddr> = format!("{}:1024", subdomain.domain)
         .to_socket_addrs()
         .expect("port scanner: Creating socket address")
@@ -26,7 +28,7 @@ pub fn scan_ports(mut subdomain: Subdomain) -> Subdomain {
     }
 
     subdomain.open_ports = MOST_COMMON_PORTS_100
-        .iter()
+        .par_iter()
         .map(|port| scan_port(socket_addresses[0], *port))
         .filter(|port| port.is_open)
         .collect();
