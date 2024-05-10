@@ -11,13 +11,10 @@ type DnsResolver = TokioAsyncResolver;
 pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
     let url = format!("https://crt.sh/?q=%25.{}&output=json", target);
 
+    println!("Request: {:?}", url);
     let entries: Vec<CrtShEntry> = http_client.get(url).send().await?.json().await?;
 
-    let mut opts = ResolverOpts::default();
-    opts.timeout = Duration::from_millis(RESOLVE_DNS_TIMEOUT_MS);
-    let dns_resolver = DnsResolver::tokio(ResolverConfig::default(), opts);
-
-    // cleaning entries (unchanged)
+    // cleaning entries
     let mut subdomains: HashSet<String> = entries
         .into_iter()
         .flat_map(|entry| {
@@ -31,6 +28,13 @@ pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdoma
         .filter(|subdomain| !subdomain.contains('*'))
         .collect();
     subdomains.insert(target.to_string());
+
+    println!("{} subdomains to resolve", subdomains.len());
+
+    // create a DNS resolver
+    let mut opts = ResolverOpts::default();
+    opts.timeout = Duration::from_millis(RESOLVE_DNS_TIMEOUT_MS);
+    let dns_resolver = DnsResolver::tokio(ResolverConfig::default(), opts);
 
     // using stream to resolve dns
     let subdomains: Vec<Subdomain> = stream::iter(subdomains.into_iter())
@@ -51,7 +55,7 @@ pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdoma
         .collect()
         .await;
 
-    todo!()
+    Ok(subdomains)
 }
 
 pub async fn resolves(dns_resolver: &DnsResolver, domain: &Subdomain) -> bool {
