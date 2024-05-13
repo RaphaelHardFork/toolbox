@@ -5,13 +5,14 @@ use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::TokioAsyncResolver;
 use reqwest::Client;
 use std::{collections::HashSet, time::Duration};
+use tracing::{debug, info};
 
 type DnsResolver = TokioAsyncResolver;
 
 pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
     let url = format!("https://crt.sh/?q=%25.{}&output=json", target);
 
-    println!("Request: {:?}", url);
+    info!("{:12} - {:?}", "HTTP REQUEST", url);
     let entries: Vec<CrtShEntry> = http_client.get(url).send().await?.json().await?;
 
     // cleaning entries
@@ -26,10 +27,11 @@ pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdoma
         })
         .filter(|subdomain| subdomain != target)
         .filter(|subdomain| !subdomain.contains('*'))
+        .inspect(|subdomain| debug!("{:12} - {:?}", "COLLECTED", subdomain))
         .collect();
     subdomains.insert(target.to_string());
 
-    println!("{} subdomains to resolve", subdomains.len());
+    info!("{:12} - {:?}", "TO RESOLVE", subdomains.len());
 
     // create a DNS resolver
     let mut opts = ResolverOpts::default();
@@ -46,14 +48,18 @@ pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdoma
             let dns_resolver = dns_resolver.clone();
             async move {
                 if resolves(&dns_resolver, &subdomain).await {
+                    debug!("{:12} - {:?}", "RESOLVED", subdomain.domain);
                     Some(subdomain)
                 } else {
+                    debug!("{:12} - {:?}", "NOT RESOLVED", subdomain.domain);
                     None
                 }
             }
         })
         .collect()
         .await;
+
+    info!("{:12} - {:?}", "RESOLVED", subdomains.len());
 
     Ok(subdomains)
 }

@@ -4,6 +4,7 @@ use futures::StreamExt;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use tokio::{net::TcpStream, sync::mpsc};
+use tracing::{debug, info};
 
 pub const MOST_COMMON_PORTS_100: &[u16] = &[
     80, 23, 443, 21, 22, 25, 3389, 110, 445, 139, 143, 53, 135, 3306, 8080, 1723, 111, 995, 993,
@@ -15,7 +16,6 @@ pub const MOST_COMMON_PORTS_100: &[u16] = &[
 ];
 
 pub async fn scan_ports(concurrency: usize, mut subdomain: Subdomain) -> Subdomain {
-    println!("Scanning ports for {:?}", &subdomain.domain);
     let socket_addresses: Vec<SocketAddr> = format!("{}:1024", subdomain.domain)
         .to_socket_addrs()
         .expect("port scanner: Creating socket address")
@@ -25,6 +25,10 @@ pub async fn scan_ports(concurrency: usize, mut subdomain: Subdomain) -> Subdoma
         return subdomain;
     }
     let socket_address = socket_addresses[0];
+    info!(
+        "{:12} - {:?} ({})",
+        "SCAN ON", socket_address, &subdomain.domain
+    );
 
     // create 2 channels, one for enumerate ports and the other to
     // execute scan_port and collect the result
@@ -69,6 +73,7 @@ async fn scan_port(mut socker_address: SocketAddr, port: u16) -> Port {
         tokio::time::timeout(timeout, TcpStream::connect(&socker_address)).await,
         Ok(Ok(_))
     );
+    debug!("{:12} - {:?} {}", "LISTENING", socker_address, is_open);
 
     Port { port, is_open }
 }

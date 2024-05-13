@@ -1,1 +1,3 @@
 [env]
+
+RUST_LOG = "async_scanner=info"

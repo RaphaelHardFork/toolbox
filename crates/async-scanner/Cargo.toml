@@ -5,7 +5,10 @@ edition = "2021"
 
 [dependencies]
 # -- Async
+async-trait = "0.1.80"
+futures = "0.3.30"
 tokio = { version = "1.37.0", features = ["full"] }
+tokio-stream = "0.1.15"
 # -- Http requests
 reqwest = { version = "0.12.4", features = ["json"] }
 # -- resolve DNS
@@ -14,8 +17,9 @@ hickory-resolver = "0.24.1"
 serde = { version = "1.0.200", features = ["derive"] }
 # -- Utils
 derive_more = { version = "0.99.17", features = ["from"] }
-tokio-stream = "0.1.15"
-futures = "0.3.30"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+clap = { version = "4.5.4", features = ["cargo"] }
 
 [lints]
 workspace = true

@@ -7,6 +7,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug, From)]
 pub enum Error {
     CliUsage(String),
+    InvalidHttpResponse(String),
 
     #[from]
     IO(io::Error),
