@@ -61,6 +61,12 @@ fn main() -> Result<()> {
             for module in subdomains_modules {
                 println!("  - {:?}: {}", module.name(), module.description());
             }
+
+            let http_modules = modules::http_modules();
+            println!("\nHTTP modules");
+            for module in http_modules {
+                println!("  - {:?}: {}", module.name(), module.description());
+            }
         }
 
         // fallback (never used: filtered by clap)
