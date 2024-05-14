@@ -1,7 +1,7 @@
 use super::SubdomainModule;
 use crate::{modules::Module, Error, Result};
 use async_trait::async_trait;
-use reqwest::Url;
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{error, info};
@@ -28,9 +28,10 @@ struct WebArchiveResponse(Vec<Vec<String>>);
 
 #[async_trait]
 impl SubdomainModule for WebArchive {
-    async fn enumerate(&self, domain: &str) -> Result<Vec<String>> {
+    async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>> {
         let url = format!("https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url={}", domain);
-        let res = reqwest::get(&url).await?;
+        info!("{:12} - {:?}", "HTTP REQUEST", url);
+        let res = http_client.get(url).send().await?;
 
         if !res.status().is_success() {
             return Err(Error::InvalidHttpResponse(self.name()));

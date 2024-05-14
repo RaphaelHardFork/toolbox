@@ -5,7 +5,7 @@ use std::{collections::HashSet, time::Duration};
 use tracing::{error, info};
 
 // timeouts
-const HTTP_REQUEST_TIMEOUT_MS: u64 = 10000;
+const HTTP_REQUEST_TIMEOUT_MS: u64 = 5000;
 
 // concurrency numbers
 const SUBDOMAINS_CONCURRENCY: usize = 20;
@@ -17,12 +17,15 @@ pub async fn scan(target: &str) -> Result<()> {
 
     // enumerate subdomains
     let mut subdomains: Vec<String> = stream::iter(modules::subdomains_modules().into_iter())
-        .map(|module| async move {
-            match module.enumerate(target).await {
-                Ok(new_subdomains) => Some(new_subdomains),
-                Err(err) => {
-                    error!("subdomains/{}: {}", module.name(), err);
-                    None
+        .map(|module| {
+            let http_client = &http_client;
+            async move {
+                match module.enumerate(http_client, target).await {
+                    Ok(new_subdomains) => Some(new_subdomains),
+                    Err(err) => {
+                        error!("subdomains/{}: {}", module.name(), err);
+                        None
+                    }
                 }
             }
         })
@@ -51,7 +54,7 @@ pub async fn scan(target: &str) -> Result<()> {
         })
         .collect();
 
-    info!("Found {} domains", subdomains.len());
+    info!("{:12} - {} domains", "TO RESOLVE", subdomains.len());
 
     // filter unresolvable domains
     let dns_resolver = dns::new_resolver();
@@ -61,6 +64,8 @@ pub async fn scan(target: &str) -> Result<()> {
         .filter_map(|domain| async move { domain })
         .collect()
         .await;
+
+    info!("{:12} - {} domains", "RESOLVED", subdomains.len());
 
     // scan ports
     let subdomains: Vec<Subdomain> = stream::iter(subdomains.into_iter())

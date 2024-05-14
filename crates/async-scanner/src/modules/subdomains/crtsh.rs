@@ -2,9 +2,10 @@ use super::SubdomainModule;
 use crate::Result;
 use crate::{modules::Module, Error};
 use async_trait::async_trait;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub struct CrtSh {}
 
@@ -31,9 +32,10 @@ pub struct CrtShEntry {
 
 #[async_trait]
 impl SubdomainModule for CrtSh {
-    async fn enumerate(&self, domain: &str) -> Result<Vec<String>> {
+    async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>> {
         let url = format!("https://crt.sh/?q=%25.{}&output=json", domain);
-        let res = reqwest::get(&url).await?;
+        info!("{:12} - {:?}", "HTTP REQUEST", url);
+        let res = http_client.get(url).send().await?;
 
         if !res.status().is_success() {
             return Err(Error::InvalidHttpResponse(self.name()));
