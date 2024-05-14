@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{debug, info};
 
+// region:        --- Module info
+
 pub struct CrtSh {}
 
 impl CrtSh {
@@ -24,6 +26,8 @@ impl Module for CrtSh {
         "Use crt.sh/ to find subdomains".to_string()
     }
 }
+
+// endregion:     --- Module info
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CrtShEntry {

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{error, info};
 
+// region:        --- Module info
+
 pub struct WebArchive {}
 
 impl WebArchive {
@@ -23,13 +25,15 @@ impl Module for WebArchive {
     }
 }
 
+// endregion:     --- Module info
+
 #[derive(Debug, Serialize, Deserialize)]
 struct WebArchiveResponse(Vec<Vec<String>>);
 
 #[async_trait]
 impl SubdomainModule for WebArchive {
     async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>> {
-        let url = format!("https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url={}", domain);
+        let url = format!("https://web.archive.org/cdx/search/cdx?url={}&output=json&matchType=domain&fl=original&collapse=urlkey", domain);
         info!("{:12} - {:?}", "HTTP REQUEST", url);
         let res = http_client.get(url).send().await?;
 
@@ -37,24 +41,25 @@ impl SubdomainModule for WebArchive {
             return Err(Error::InvalidHttpResponse(self.name()));
         }
 
-        let web_archive_urls: WebArchiveResponse = match res.json().await {
-            Ok(info) => info,
+        let web_archive_urls: Vec<String> = match res.json::<WebArchiveResponse>().await {
+            Ok(info) => info.0.into_iter().flatten().collect(),
             Err(_) => return Err(Error::InvalidHttpResponse(self.name())),
         };
 
         let subdomains: HashSet<String> = web_archive_urls
-            .0
             .into_iter()
-            .flatten()
             .filter_map(|url| {
-                Url::parse(&url)
-                    .map_err(|err| {
-                        error!("{}: error parsing url: {}", self.name(), err);
-                        err
-                    })
-                    .ok()
+                if url == "original" {
+                    return None;
+                }
+                match Url::parse(&url) {
+                    Ok(parsed_url) => parsed_url.host_str().map(|host| host.to_string()),
+                    Err(_) => {
+                        error!("{:12} - url: \"{}\"", "PARSE URL", url);
+                        None
+                    }
+                }
             })
-            .filter_map(|url| url.host_str().map(|host| host.to_string()))
             .collect();
 
         Ok(subdomains.into_iter().collect())
