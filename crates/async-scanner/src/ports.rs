@@ -4,7 +4,7 @@ use futures::StreamExt;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use tokio::{net::TcpStream, sync::mpsc};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 pub const MOST_COMMON_PORTS_100: &[u16] = &[
     80, 23, 443, 21, 22, 25, 3389, 110, 445, 139, 143, 53, 135, 3306, 8080, 1723, 111, 995, 993,
@@ -16,10 +16,17 @@ pub const MOST_COMMON_PORTS_100: &[u16] = &[
 ];
 
 pub async fn scan_ports(concurrency: usize, mut subdomain: Subdomain) -> Subdomain {
-    let socket_addresses: Vec<SocketAddr> = format!("{}:1024", subdomain.domain)
-        .to_socket_addrs()
-        .expect("port scanner: Creating socket address")
-        .collect();
+    let socket_addresses: Vec<SocketAddr> =
+        match format!("{}:1024", subdomain.domain).to_socket_addrs() {
+            Ok(addresses) => addresses.collect(),
+            Err(_) => {
+                error!(
+                    "{:12} - \"{}:1024\" cannot be created",
+                    "SOCKET", subdomain.domain
+                );
+                Vec::new()
+            }
+        };
 
     if socket_addresses.is_empty() {
         return subdomain;
@@ -27,7 +34,9 @@ pub async fn scan_ports(concurrency: usize, mut subdomain: Subdomain) -> Subdoma
     let socket_address = socket_addresses[0];
     info!(
         "{:12} - {:?} ({})",
-        "SCAN ON", socket_address, &subdomain.domain
+        "SCAN PORTS",
+        socket_address.ip(),
+        &subdomain.domain
     );
 
     // create 2 channels, one for enumerate ports and the other to
