@@ -1,11 +1,16 @@
-use crate::{dns, model::Subdomain, modules, ports, Result};
+use crate::{
+    dns,
+    model::Subdomain,
+    modules::{self, http::HttpModule},
+    ports, Result,
+};
 use futures::{stream, StreamExt};
 use reqwest::Client;
 use std::{collections::HashSet, time::Duration};
 use tracing::{error, info};
 
 // timeouts
-const HTTP_REQUEST_TIMEOUT_MS: u64 = 5000;
+const HTTP_REQUEST_TIMEOUT_MS: u64 = 7500;
 
 // concurrency numbers
 const SUBDOMAINS_CONCURRENCY: usize = 20;
@@ -74,13 +79,45 @@ pub async fn scan(target: &str) -> Result<()> {
         .collect()
         .await;
 
-    // display result
-    for subdomain in &subdomains {
-        println!("Open ports in {}", &subdomain.domain);
-        for port in &subdomain.open_ports {
-            println!("{}", port.port);
+    // display result => TODO store it into a file
+    // for subdomain in &subdomains {
+    //     println!("Open ports in {}", &subdomain.domain);
+    //     for port in &subdomain.open_ports {
+    //         println!("{}", port.port);
+    //     }
+    // }
+
+    // scan vulnerabilities
+    // prepare the scan
+    let mut targets: Vec<(Box<dyn HttpModule>, String)> = Vec::new();
+    for subdomain in subdomains {
+        for port in subdomain.open_ports {
+            let http_modules = modules::http_modules();
+            for http_module in http_modules {
+                let target = format!("http://{}:{}", &subdomain.domain, port.port);
+                targets.push((http_module, target));
+            }
         }
     }
+
+    // scan
+    stream::iter(targets.into_iter())
+        .for_each_concurrent(20, |(module, target)| {
+            let http_client = &http_client;
+            async move {
+                match module.scan(http_client, &target).await {
+                    Ok(Some(finding)) => println!("{:?}", &finding),
+                    Ok(None) => println!("No finding"),
+                    Err(err) => error!(
+                        "{:12} - with module \"{}\"\nReason: {:?}",
+                        "DETECTION",
+                        module.name(),
+                        err
+                    ),
+                }
+            }
+        })
+        .await;
 
     Ok(())
 }

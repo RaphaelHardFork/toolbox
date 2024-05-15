@@ -1,40 +1,32 @@
 use super::{HttpFinding, HttpModule};
 use crate::{modules::Module, Result};
 use async_trait::async_trait;
-use lazy_regex::{regex, Lazy, Regex};
 use reqwest::Client;
 use tracing::info;
 
 // region:        --- Module info
 
-pub struct DirectoryListingDisclosure {}
+pub struct PrometheusUnauthenticatedAccess {}
 
-impl DirectoryListingDisclosure {
+impl PrometheusUnauthenticatedAccess {
     pub fn new() -> Self {
         Self {}
     }
-
-    pub async fn is_directory_listing(&self, body: String) -> Result<bool> {
-        let dir_listing_regex = regex!(r"<title>Index of .*</title>");
-        let res = tokio::task::spawn_blocking(move || dir_listing_regex.is_match(&body)).await?;
-
-        Ok(res)
-    }
 }
 
-impl Module for DirectoryListingDisclosure {
+impl Module for PrometheusUnauthenticatedAccess {
     fn name(&self) -> String {
-        "http/directory_listing_disclosure".to_string()
+        "http/prometheus_unauth_access".to_string()
     }
     fn description(&self) -> String {
-        "Check for enabled directory listing, which often leak information".to_string()
+        "Check Prometheus unauthenticated access".to_string()
     }
 }
 
 // endregion:     --- Module info
 
 #[async_trait]
-impl HttpModule for DirectoryListingDisclosure {
+impl HttpModule for PrometheusUnauthenticatedAccess {
     async fn scan(&self, http_client: &Client, endpoint: &str) -> Result<Option<HttpFinding>> {
         info!("{:12} - {:?}", "HTTP REQUEST", endpoint);
         let res = http_client.get(endpoint).send().await?;
@@ -44,8 +36,10 @@ impl HttpModule for DirectoryListingDisclosure {
         }
 
         let body = res.text().await?;
-        if self.is_directory_listing(body).await? {
-            return Ok(Some(HttpFinding::DirectoryListingDisclosure(
+        if body
+            .contains(r#"<title>Prometheus Time Series Collection and Processing Server</title>"#)
+        {
+            return Ok(Some(HttpFinding::PrometheusUnauthenticatedAccess(
                 endpoint.to_string(),
             )));
         }

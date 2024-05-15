@@ -14,6 +14,9 @@ pub enum Error {
 
     #[from]
     Reqwest(reqwest::Error),
+
+    #[from]
+    Tokio(tokio::task::JoinError),
 }
 
 // region:    --- Error Boilerplate

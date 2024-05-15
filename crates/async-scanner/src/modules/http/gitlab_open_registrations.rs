@@ -2,6 +2,7 @@ use super::{HttpFinding, HttpModule};
 use crate::{modules::Module, Result};
 use async_trait::async_trait;
 use reqwest::Client;
+use tracing::info;
 
 // region:        --- Module info
 
@@ -27,6 +28,7 @@ impl Module for GitlabOpenRegistrations {
 #[async_trait]
 impl HttpModule for GitlabOpenRegistrations {
     async fn scan(&self, http_client: &Client, endpoint: &str) -> Result<Option<HttpFinding>> {
+        info!("{:12} - {:?}", "HTTP REQUEST", endpoint);
         let res = http_client.get(endpoint).send().await?;
 
         if !res.status().is_success() {
