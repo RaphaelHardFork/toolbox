@@ -6,18 +6,6 @@ use crate::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 
-#[derive(Debug, Clone)]
-pub struct Subdomain {
-    pub domain: String,
-    pub open_ports: Vec<Port>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Port {
-    pub port: u16,
-    pub is_open: bool,
-}
-
 #[async_trait]
 pub trait SubdomainModule: Module {
     async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>>;

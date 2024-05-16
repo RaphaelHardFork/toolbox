@@ -1,12 +1,16 @@
 use crate::{
     dns,
-    model::Subdomain,
+    model::{ensure_dir, export_to_json, export_to_markdown, Subdomain},
     modules::{self, http::HttpModule},
     ports, Result,
 };
 use futures::{stream, StreamExt};
 use reqwest::Client;
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::HashSet,
+    path::Path,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 use tracing::{error, info};
 
 // timeouts
@@ -17,6 +21,12 @@ const SUBDOMAINS_CONCURRENCY: usize = 20;
 
 #[tokio::main]
 pub async fn scan(target: &str) -> Result<()> {
+    // create file
+    let output_dir = format!("output/scanner/{}", target);
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let filename = format!("{}", timestamp);
+
+    // create http client
     let http_timeout = Duration::from_millis(HTTP_REQUEST_TIMEOUT_MS);
     let http_client = Client::builder().timeout(http_timeout).build()?;
 
@@ -51,6 +61,7 @@ pub async fn scan(target: &str) -> Result<()> {
             if domain.contains(target) {
                 Some(Subdomain {
                     domain,
+                    ip: String::new(),
                     open_ports: Vec::new(),
                 })
             } else {
@@ -79,6 +90,15 @@ pub async fn scan(target: &str) -> Result<()> {
         .collect()
         .await;
 
+    // ensure_dir(output_dir.as_ref())?;
+    // let json_path = Path::new(&output_dir)
+    //     .join(&filename)
+    //     .with_extension("json");
+    // let md_path = Path::new(&output_dir).join(filename).with_extension("md");
+    // export_to_json(&subdomains, &json_path)?;
+    // export_to_markdown(&subdomains, &target, &md_path)?;
+    // return Ok(());
+
     // display result => TODO store it into a file
     // for subdomain in &subdomains {
     //     println!("Open ports in {}", &subdomain.domain);
@@ -90,8 +110,8 @@ pub async fn scan(target: &str) -> Result<()> {
     // scan vulnerabilities
     // prepare the scan
     let mut targets: Vec<(Box<dyn HttpModule>, String)> = Vec::new();
-    for subdomain in subdomains {
-        for port in subdomain.open_ports {
+    for subdomain in &subdomains {
+        for port in &subdomain.open_ports {
             let http_modules = modules::http_modules();
             for http_module in http_modules {
                 let target = format!("http://{}:{}", &subdomain.domain, port.port);
@@ -118,6 +138,14 @@ pub async fn scan(target: &str) -> Result<()> {
             }
         })
         .await;
+
+    ensure_dir(output_dir.as_ref())?;
+    let json_path = Path::new(&output_dir)
+        .join(&filename)
+        .with_extension("json");
+    let md_path = Path::new(&output_dir).join(filename).with_extension("md");
+    export_to_json(&subdomains, &json_path)?;
+    export_to_markdown(&subdomains, &target, &md_path)?;
 
     Ok(())
 }

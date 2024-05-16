@@ -10,3 +10,6 @@
 target/
 !Cargo.lock # commented by default
 !.cargo/
+
+# -- App
+output/

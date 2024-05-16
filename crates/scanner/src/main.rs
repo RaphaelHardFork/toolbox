@@ -4,7 +4,6 @@ mod model;
 mod modules;
 mod ports;
 mod scan;
-mod subdomains;
 
 pub use error::{Error, Result};
 
@@ -31,6 +30,7 @@ fn main() -> Result<()> {
     // setup tracing
     tracing_subscriber::fmt()
         // .without_time() // DEV
+        .with_max_level(tracing::Level::INFO)
         .with_target(false)
         .with_env_filter(EnvFilter::from_default_env())
         .init();

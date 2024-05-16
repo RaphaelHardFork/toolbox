@@ -38,6 +38,7 @@ pub async fn scan_ports(concurrency: usize, mut subdomain: Subdomain) -> Subdoma
         socket_address.ip(),
         &subdomain.domain
     );
+    subdomain.ip = socket_address.ip().to_string();
 
     // create 2 channels, one for enumerate ports and the other to
     // execute scan_port and collect the result
@@ -84,5 +85,9 @@ async fn scan_port(mut socker_address: SocketAddr, port: u16) -> Port {
     );
     debug!("{:12} - {:?} {}", "LISTENING", socker_address, is_open);
 
-    Port { port, is_open }
+    Port {
+        port,
+        is_open,
+        findings: Vec::new(),
+    }
 }

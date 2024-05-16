@@ -17,8 +17,9 @@ use super::Module;
 use crate::Result;
 use async_trait::async_trait;
 use reqwest::Client;
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum HttpFinding {
     // -- Git related
     GitlabOpenRegistrations(String),

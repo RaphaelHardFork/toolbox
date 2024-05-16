@@ -13,6 +13,15 @@ pub enum Error {
     IO(io::Error),
 
     #[from]
+    Write(std::fmt::Error),
+
+    #[from]
+    SystemTime(std::time::SystemTimeError),
+
+    #[from]
+    Serialize(serde_json::Error),
+
+    #[from]
     Reqwest(reqwest::Error),
 
     #[from]
