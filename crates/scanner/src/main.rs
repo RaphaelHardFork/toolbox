@@ -1,73 +1,98 @@
-use error::Result;
-use model::Subdomain;
-use rayon::prelude::*;
-use std::{env, time::Duration};
-use ureq::Agent;
-
+mod dns;
 mod error;
 mod model;
+mod modules;
 mod ports;
+mod scan;
 mod subdomains;
 
-// global timeouts
+pub use error::{Error, Result};
+
+use clap::{Arg, Command};
+use futures::{stream, StreamExt};
+use model::Subdomain;
+use reqwest::Client;
+use scan::scan;
+use std::env;
+use std::time::{Duration, Instant};
+use tracing::{debug, error, info};
+use tracing_subscriber::EnvFilter;
+
+// timeouts
 const HTTP_REQUEST_TIMEOUT_MS: u64 = 10000;
 pub const SOCKET_CON_TIMEOUT_MS: u64 = 3000;
 pub const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
 
+// concurrencies values
+const PORTS_CONCURRENCY: usize = 200;
+const SUBDOMAINS_CONCURRENCY: usize = 100;
+
 fn main() -> Result<()> {
-    // collect and validate args
+    // setup tracing
+    tracing_subscriber::fmt()
+        // .without_time() // DEV
+        .with_target(false)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        return Err(error::Error::CliUsage(
-            "Usage:\ncargo run <domain>".to_string(),
-        ));
-    }
-    let target = args[1].as_str();
+    let cli = Command::new(clap::crate_name!())
+        .version(clap::crate_version!())
+        .subcommand(Command::new("modules").about("List all modules"))
+        .subcommand(
+            Command::new("scan").about("Scan a target").arg(
+                Arg::new("target")
+                    .help("The domain name to scan")
+                    .required(true)
+                    .index(1),
+            ),
+        )
+        .arg_required_else_help(true)
+        .get_matches();
 
-    // request crt.sh
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_millis(HTTP_REQUEST_TIMEOUT_MS))
-        .build();
-
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(256).build()?;
-    let _ = pool.install(|| -> Result<()> {
-        let scan_result: Vec<Subdomain> = subdomains::enumerate(&agent, target)?
-            .into_par_iter()
-            .map(ports::scan_ports)
-            .collect();
-
-        for subdomain in scan_result {
-            println!("Open ports on subdomain: {}", &subdomain.domain);
-            for port in &subdomain.open_ports {
-                println!("{}", port.port)
+    match cli.subcommand() {
+        Some(("scan", args)) => {
+            if let Some(target) = args.get_one::<String>("target") {
+                scan(target);
             }
-            println!()
+        }
+        Some(("modules", _)) => {
+            let subdomains_modules = modules::subdomains_modules();
+            println!("\nSubdomains modules");
+            for module in subdomains_modules {
+                println!("- {:25}{}", module.name(), module.description());
+            }
+            let http_modules = modules::http_modules();
+            println!("\nHTTP modules");
+            for module in http_modules {
+                println!("- {:35}{}", module.name(), module.description());
+            }
         }
 
-        Ok(())
-    });
-
-    // will wait for each subdomains and each ports
-    // scan_single_threaded(&agent, target)?;
-
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn scan_single_threaded(agent: &Agent, target: &str) -> Result<()> {
-    let scan_result: Vec<Subdomain> = subdomains::enumerate(agent, target)?
-        .into_iter()
-        .map(ports::scan_ports)
-        .collect();
-
-    for subdomain in scan_result {
-        println!("Subdomain: {}", &subdomain.domain);
-        for port in &subdomain.open_ports {
-            println!("{}", port.port)
-        }
-        println!()
+        // fallback (never used: filtered by clap)
+        _ => println!("NOTHING"),
     }
+
+    // let scan_start = Instant::now();
+
+    // // enumerate subdomains
+    // let subdomains = subdomains::enumerate(&http_client, target).await?;
+
+    // // scan ports for each subdomains
+    // let scan_result: Vec<Subdomain> = stream::iter(subdomains.into_iter())
+    //     .map(|subdomain| ports::scan_ports(PORTS_CONCURRENCY, subdomain))
+    //     .buffer_unordered(SUBDOMAINS_CONCURRENCY)
+    //     .collect()
+    //     .await;
+
+    // // display result
+    // for subdomain in scan_result {
+    //     println!("Open ports in {}", &subdomain.domain);
+    //     for port in &subdomain.open_ports {
+    //         println!("{}", port.port);
+    //     }
+    // }
+
+    // info!("{:12} - {:?}", "SCAN COMPLETED", scan_start.elapsed());
 
     Ok(())
 }

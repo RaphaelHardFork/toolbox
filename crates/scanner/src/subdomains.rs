@@ -1,22 +1,19 @@
+use crate::model::{CrtShEntry, Subdomain};
+use crate::{Result, RESOLVE_DNS_TIMEOUT_MS};
+use futures::{stream, StreamExt};
+use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::TokioAsyncResolver;
+use reqwest::Client;
 use std::{collections::HashSet, time::Duration};
+use tracing::{debug, info};
 
-use hickory_resolver::{
-    config::{ResolverConfig, ResolverOpts},
-    Resolver,
-};
-use ureq::Agent;
+type DnsResolver = TokioAsyncResolver;
 
-use crate::{
-    error::Result,
-    model::{CrtShEntry, Subdomain},
-    RESOLVE_DNS_TIMEOUT_MS,
-};
-
-pub fn enumerate(agent: &Agent, target: &str) -> Result<Vec<Subdomain>> {
+pub async fn enumerate(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
     let url = format!("https://crt.sh/?q=%25.{}&output=json", target);
 
-    println!("Request: {:?}", url);
-    let entries: Vec<CrtShEntry> = agent.get(&url).call()?.into_json()?;
+    info!("{:12} - {:?}", "HTTP REQUEST", url);
+    let entries: Vec<CrtShEntry> = http_client.get(url).send().await?.json().await?;
 
     // cleaning entries
     let mut subdomains: HashSet<String> = entries
@@ -30,31 +27,43 @@ pub fn enumerate(agent: &Agent, target: &str) -> Result<Vec<Subdomain>> {
         })
         .filter(|subdomain| subdomain != target)
         .filter(|subdomain| !subdomain.contains('*'))
+        .inspect(|subdomain| debug!("{:12} - {:?}", "COLLECTED", subdomain))
         .collect();
     subdomains.insert(target.to_string());
 
-    println!("Subdomains to resolves: {:?}", subdomains);
+    info!("{:12} - {:?}", "TO RESOLVE", subdomains.len());
 
-    // only keep resolved subdomains
-    let subdomains: Vec<Subdomain> = subdomains
-        .into_iter()
+    // create a DNS resolver
+    let mut opts = ResolverOpts::default();
+    opts.timeout = Duration::from_millis(RESOLVE_DNS_TIMEOUT_MS);
+    let dns_resolver = DnsResolver::tokio(ResolverConfig::default(), opts);
+
+    // using stream to resolve dns
+    let subdomains: Vec<Subdomain> = stream::iter(subdomains.into_iter())
         .map(|domain| Subdomain {
             domain,
             open_ports: Vec::new(),
         })
-        .filter(resolves)
-        .collect();
+        .filter_map(|subdomain| {
+            let dns_resolver = dns_resolver.clone();
+            async move {
+                if resolves(&dns_resolver, &subdomain).await {
+                    debug!("{:12} - {:?}", "RESOLVED", subdomain.domain);
+                    Some(subdomain)
+                } else {
+                    debug!("{:12} - {:?}", "NOT RESOLVED", subdomain.domain);
+                    None
+                }
+            }
+        })
+        .collect()
+        .await;
+
+    info!("{:12} - {:?}", "RESOLVED", subdomains.len());
 
     Ok(subdomains)
 }
 
-pub fn resolves(domain: &Subdomain) -> bool {
-    let mut opts = ResolverOpts::default();
-    opts.timeout = Duration::from_millis(RESOLVE_DNS_TIMEOUT_MS);
-
-    let dns_resolver = Resolver::new(ResolverConfig::default(), opts)
-        // panic if the DNS client fail to build
-        .expect("subdomains resolver: failed to build DNS client");
-
-    dns_resolver.lookup_ip(domain.domain.as_str()).is_ok()
+pub async fn resolves(dns_resolver: &DnsResolver, domain: &Subdomain) -> bool {
+    dns_resolver.lookup_ip(domain.domain.as_str()).await.is_ok()
 }

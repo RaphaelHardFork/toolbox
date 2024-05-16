@@ -4,4 +4,4 @@ unused = "allow"       # For exploratory dev.
 
 [workspace]
 resolver = "2"
-members = ["crates/async-scanner", "crates/scanner", "crates/sha1-cracker"]
+members = ["crates/scanner", "crates/simple-scanner", "crates/sha1-cracker"]

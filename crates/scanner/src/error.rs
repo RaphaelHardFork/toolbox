@@ -7,16 +7,16 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug, From)]
 pub enum Error {
     CliUsage(String),
+    InvalidHttpResponse(String),
 
     #[from]
     IO(io::Error),
 
-    // -- Externals
     #[from]
-    Ureq(ureq::Error),
+    Reqwest(reqwest::Error),
 
     #[from]
-    Rayon(rayon::ThreadPoolBuildError),
+    Tokio(tokio::task::JoinError),
 }
 
 // region:    --- Error Boilerplate
