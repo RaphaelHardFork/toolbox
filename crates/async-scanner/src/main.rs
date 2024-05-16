@@ -59,13 +59,12 @@ fn main() -> Result<()> {
             let subdomains_modules = modules::subdomains_modules();
             println!("\nSubdomains modules");
             for module in subdomains_modules {
-                println!("  - {:?}: {}", module.name(), module.description());
+                println!("- {:25}{}", module.name(), module.description());
             }
-
             let http_modules = modules::http_modules();
             println!("\nHTTP modules");
             for module in http_modules {
-                println!("  - {:?}: {}", module.name(), module.description());
+                println!("- {:35}{}", module.name(), module.description());
             }
         }
 

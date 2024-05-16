@@ -19,7 +19,7 @@ impl Module for DotEnvDisclosure {
         "http/dotenv_disclosure".to_string()
     }
     fn description(&self) -> String {
-        "Check if a .env file is available".to_string()
+        "Check if a .env file disclosure".to_string()
     }
 }
 
