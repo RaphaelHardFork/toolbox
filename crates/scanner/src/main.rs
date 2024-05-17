@@ -15,6 +15,7 @@ use scan::scan;
 use std::env;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info};
+use tracing_subscriber::fmt::format::{FmtSpan, Format};
 use tracing_subscriber::EnvFilter;
 
 // timeouts
@@ -31,8 +32,10 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt()
         // .without_time() // DEV
         .with_max_level(tracing::Level::INFO)
-        .with_target(false)
+        .with_span_events(FmtSpan::CLOSE)
         .with_env_filter(EnvFilter::from_default_env())
+        // .fmt_fields(Format::default().compact())
+        .with_target(false)
         .init();
 
     let cli = Command::new(clap::crate_name!())
@@ -49,50 +52,22 @@ fn main() -> Result<()> {
         .arg_required_else_help(true)
         .get_matches();
 
+    debug!("Scanner started with: {:?}", cli);
     match cli.subcommand() {
         Some(("scan", args)) => {
             if let Some(target) = args.get_one::<String>("target") {
                 scan(target);
             }
         }
-        Some(("modules", _)) => {
-            let subdomains_modules = modules::subdomains_modules();
-            println!("\nSubdomains modules");
-            for module in subdomains_modules {
-                println!("- {:25}{}", module.name(), module.description());
-            }
-            let http_modules = modules::http_modules();
-            println!("\nHTTP modules");
-            for module in http_modules {
-                println!("- {:35}{}", module.name(), module.description());
-            }
+
+        Some(("modules", _)) => modules::display_all(),
+
+        // fallback if a cmd is not handled (should not possible)
+        _ => {
+            error!("{:12} - Command not handled, exit program", "CLI ERROR");
+            return Err(Error::CliUsage("Command not handled".into()));
         }
-
-        // fallback (never used: filtered by clap)
-        _ => println!("NOTHING"),
     }
-
-    // let scan_start = Instant::now();
-
-    // // enumerate subdomains
-    // let subdomains = subdomains::enumerate(&http_client, target).await?;
-
-    // // scan ports for each subdomains
-    // let scan_result: Vec<Subdomain> = stream::iter(subdomains.into_iter())
-    //     .map(|subdomain| ports::scan_ports(PORTS_CONCURRENCY, subdomain))
-    //     .buffer_unordered(SUBDOMAINS_CONCURRENCY)
-    //     .collect()
-    //     .await;
-
-    // // display result
-    // for subdomain in scan_result {
-    //     println!("Open ports in {}", &subdomain.domain);
-    //     for port in &subdomain.open_ports {
-    //         println!("{}", port.port);
-    //     }
-    // }
-
-    // info!("{:12} - {:?}", "SCAN COMPLETED", scan_start.elapsed());
 
     Ok(())
 }

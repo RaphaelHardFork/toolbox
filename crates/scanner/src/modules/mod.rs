@@ -1,6 +1,8 @@
 pub mod http;
 mod subdomains;
 
+use std::time::Instant;
+
 use self::http::HttpModule;
 use self::subdomains::SubdomainModule;
 use crate::modules::http::cve_2017_9506::Cve2017_9506;
@@ -18,9 +20,15 @@ use crate::modules::http::kibana_unauth_access::KibanaUnauthenticatedAccess;
 use crate::modules::http::prometheus_unauth_access::PrometheusUnauthenticatedAccess;
 use crate::modules::http::traefik_unauth_access::TraefikUnauthenticatedAccess;
 use crate::modules::subdomains::{crtsh::CrtSh, web_archive::WebArchive};
-use crate::Result;
+use crate::{Error, Result};
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, Response};
+use tracing::{debug, error, info, info_span, instrument, span, Instrument};
+
+pub trait Module {
+    fn name(&self) -> String;
+    fn description(&self) -> String;
+}
 
 pub fn subdomains_modules() -> Vec<Box<dyn SubdomainModule>> {
     vec![Box::new(CrtSh::new()), Box::new(WebArchive::new())]
@@ -45,7 +53,35 @@ pub fn http_modules() -> Vec<Box<dyn HttpModule>> {
     ]
 }
 
-pub trait Module {
-    fn name(&self) -> String;
-    fn description(&self) -> String;
+pub fn display_all() {
+    let subdomains_modules = subdomains_modules();
+    println!("\nSubdomains modules");
+    for module in subdomains_modules {
+        println!("- {:25}{}", module.name(), module.description());
+    }
+    let http_modules = http_modules();
+    println!("\nHTTP modules");
+    for module in http_modules {
+        println!("- {:35}{}", module.name(), module.description());
+    }
 }
+
+// region:        --- HTTP requests
+
+#[instrument(name = "HTTP_request", level = "info", skip_all, fields(url = url))]
+pub async fn http_request(http_client: &Client, url: &str) -> Result<Response> {
+    info!("Sending request");
+    match http_client.get(url).send().await {
+        Ok(res) => {
+            info!("Receive with status: {}", res.status());
+            debug!("Response: {:?}", res);
+            Ok(res)
+        }
+        Err(err) => {
+            error!("Reason: {}", err);
+            Err(Error::Reqwest(err))
+        }
+    }
+}
+
+// endregion:     --- HTTP requests

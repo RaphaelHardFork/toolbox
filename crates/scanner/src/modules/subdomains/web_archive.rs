@@ -1,10 +1,13 @@
 use super::SubdomainModule;
-use crate::{modules::Module, Error, Result};
+use crate::{
+    modules::{http_request, Module},
+    Error, Result,
+};
 use async_trait::async_trait;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use tracing::{error, info};
+use tracing::{debug, error, info, instrument, trace};
 
 // region:        --- Module info
 
@@ -32,10 +35,10 @@ struct WebArchiveResponse(Vec<Vec<String>>);
 
 #[async_trait]
 impl SubdomainModule for WebArchive {
+    #[instrument(name = "enumerate", level = "debug", fields(module = %self.name()), skip_all)]
     async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>> {
         let url = format!("https://web.archive.org/cdx/search/cdx?url={}&output=json&matchType=domain&fl=original&collapse=urlkey", domain);
-        info!("{:12} - {:?}", "HTTP REQUEST", url);
-        let res = http_client.get(url).send().await?;
+        let res = http_request(&http_client, &url).await?;
 
         if !res.status().is_success() {
             return Err(Error::InvalidHttpResponse(self.name()));
@@ -55,13 +58,15 @@ impl SubdomainModule for WebArchive {
                 match Url::parse(&url) {
                     Ok(parsed_url) => parsed_url.host_str().map(|host| host.to_string()),
                     Err(_) => {
-                        error!("{:12} - url: \"{}\"", "PARSE URL", url);
+                        error!("Parsing url: {:?}", url);
                         None
                     }
                 }
             })
+            .inspect(|url| trace!("Collecting: {:?}", url))
             .collect();
 
+        debug!("{} collected", subdomains.len());
         Ok(subdomains.into_iter().collect())
     }
 }

@@ -1,11 +1,12 @@
 use super::SubdomainModule;
+use crate::modules::http_request;
 use crate::Result;
 use crate::{modules::Module, Error};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument, trace};
 
 // region:        --- Module info
 
@@ -36,10 +37,10 @@ pub struct CrtShEntry {
 
 #[async_trait]
 impl SubdomainModule for CrtSh {
+    #[instrument(name = "enumerate", level = "debug", fields(module = %self.name()), skip_all)]
     async fn enumerate(&self, http_client: &Client, domain: &str) -> Result<Vec<String>> {
         let url = format!("https://crt.sh/?q=%25.{}&output=json", domain);
-        info!("{:12} - {:?}", "HTTP REQUEST", url);
-        let res = http_client.get(url).send().await?;
+        let res = http_request(&http_client, &url).await?;
 
         if !res.status().is_success() {
             return Err(Error::InvalidHttpResponse(self.name()));
@@ -62,10 +63,12 @@ impl SubdomainModule for CrtSh {
             })
             .filter(|subdomain| subdomain != domain)
             .filter(|subdomain| !subdomain.contains('*'))
-            .inspect(|subdomain| debug!("{:12} - {:?}", "COLLECTED", subdomain))
+            .inspect(|subdomain| trace!("Collecting: {:?}", subdomain))
             .collect();
+
         subdomains.insert(domain.to_string());
 
+        debug!("{} collected", subdomains.len());
         Ok(subdomains.into_iter().collect())
     }
 }
