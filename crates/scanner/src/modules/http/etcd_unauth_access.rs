@@ -1,8 +1,11 @@
 use super::{HttpFinding, HttpModule};
-use crate::{modules::Module, Result};
+use crate::{
+    modules::{http_request, Module},
+    Result,
+};
 use async_trait::async_trait;
 use reqwest::Client;
-use tracing::info;
+use tracing::{info, instrument};
 
 // region:        --- Module info
 
@@ -27,10 +30,10 @@ impl Module for EtcdUnauthenticatedAccess {
 
 #[async_trait]
 impl HttpModule for EtcdUnauthenticatedAccess {
+    #[instrument(name = "check", level = "info", fields(module = self.name()), skip_all)]
     async fn scan(&self, http_client: &Client, endpoint: &str) -> Result<Option<HttpFinding>> {
         let url = format!("{}/version", &endpoint);
-        info!("{:12} - {:?}", "HTTP REQUEST", &url);
-        let res = http_client.get(&url).send().await?;
+        let res = http_request(&http_client, &url).await?;
 
         if !res.status().is_success() {
             return Ok(None);

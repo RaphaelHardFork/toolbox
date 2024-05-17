@@ -3,7 +3,7 @@ use crate::{modules::Module, Result};
 use async_trait::async_trait;
 use lazy_regex::regex;
 use reqwest::Client;
-use tracing::info;
+use tracing::{debug, info, instrument};
 
 // region:        --- Module info
 
@@ -28,6 +28,7 @@ impl Module for Cve2018_7600 {
 
 #[async_trait]
 impl HttpModule for Cve2018_7600 {
+    #[instrument(name = "check", level = "info", fields(module = self.name()), skip_all)]
     async fn scan(&self, http_client: &Client, endpoint: &str) -> Result<Option<HttpFinding>> {
         // prepare post request
         let token = "08d15a4aef553492d8971cdd5198f31408d15a4aef553492d8971cdd5198f314";
@@ -44,13 +45,14 @@ impl HttpModule for Cve2018_7600 {
 
         // send request
         let url = format!("{}/", &endpoint);
-        info!("{:12} - {:?}", "HTTP REQUEST", &url);
+        info!("{:12} - {:?}", "HTTP REQUEST POST", &url);
         let res = http_client
             .post(&url)
             .query(&query_params)
             .form(&form)
             .send()
             .await?;
+        debug!("POST RESPONSE: {:?}", res);
 
         if !res.status().is_success() {
             return Ok(None);

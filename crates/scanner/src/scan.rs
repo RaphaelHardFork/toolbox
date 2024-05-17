@@ -37,8 +37,7 @@ pub async fn scan(target: &str) -> Result<()> {
     debug!("HTTP Client created: {:?}", http_client);
 
     // scan core logic
-    let subdomains = enumerate_subdomains(&http_client, target).await?;
-    let subdomains = resolve_subdomains(subdomains).await;
+    let subdomains = scan_subdomains(&http_client, target).await?;
     let mut subdomains = scan_ports(subdomains).await;
     scan_vulnerabilities(&http_client, &mut subdomains).await;
 
@@ -56,7 +55,7 @@ pub async fn scan(target: &str) -> Result<()> {
 }
 
 #[instrument(name = "subdomains", level = "info", skip_all)]
-async fn enumerate_subdomains(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
+async fn scan_subdomains(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
     let mut subdomains: Vec<String> = stream::iter(modules::subdomains_modules().into_iter())
         .map(|module| {
             let http_client = &http_client;
@@ -97,10 +96,12 @@ async fn enumerate_subdomains(http_client: &Client, target: &str) -> Result<Vec<
         .collect();
 
     info!("{} domains to resolve", subdomains.len());
+
+    let subdomains = resolve_subdomains(subdomains).await;
     Ok(subdomains)
 }
 
-#[instrument(name = "resolve_subdomains", level = "info", skip_all)]
+#[instrument(name = "resolves", level = "info", skip_all)]
 async fn resolve_subdomains(subdomains: Vec<Subdomain>) -> Vec<Subdomain> {
     let dns_resolver = dns::new_resolver();
     let subdomains: Vec<Subdomain> = stream::iter(subdomains.into_iter())
@@ -123,7 +124,7 @@ async fn scan_ports(subdomains: Vec<Subdomain>) -> Vec<Subdomain> {
         .await
 }
 
-#[instrument(name = "scan_vulnerabilities", level = "info", skip_all)]
+#[instrument(name = "vulnerabilities", level = "info", skip_all)]
 async fn scan_vulnerabilities(http_client: &Client, subdomains: &mut Vec<Subdomain>) {
     // create a cache for http responses (especially / & /.git/)
     // while keeping the httpModule arch ?
@@ -149,6 +150,7 @@ async fn scan_vulnerabilities(http_client: &Client, subdomains: &mut Vec<Subdoma
                 })
         })
         .collect();
+    debug!("{} endpoints", targets.len());
 
     let subdomains = Arc::new(Mutex::new(subdomains));
 
@@ -166,23 +168,10 @@ async fn scan_vulnerabilities(http_client: &Client, subdomains: &mut Vec<Subdoma
                                 port.findings.push(finding);
                             };
                         };
-                        // println!("{:?}", &finding)
                     }
-                    Ok(None) => {
-                        let mut subdomains = subdomains.lock().await;
-                        if let Some(subdomain) = subdomains.get_mut(i) {
-                            if let Some(port) = subdomain.open_ports.get_mut(j) {
-                                port.findings
-                                    .push(modules::http::HttpFinding::DotEnvDisclosure(target));
-                            };
-                        };
-                    }
-                    Err(err) => error!(
-                        "{:12} - with module \"{}\"\nReason: {:?}",
-                        "DETECTION",
-                        module.name(),
-                        err
-                    ),
+
+                    Ok(None) => debug!("No finding on: {}", target),
+                    Err(err) => error!("On module {:?}\nReason: {:?}", module.name(), err),
                 }
             }
         })

@@ -1,9 +1,12 @@
 use super::{HttpFinding, HttpModule};
-use crate::{modules::Module, Result};
+use crate::{
+    modules::{http_request, Module},
+    Result,
+};
 use async_trait::async_trait;
 use lazy_regex::regex;
 use reqwest::Client;
-use tracing::info;
+use tracing::{info, instrument};
 
 // region:        --- Module info
 
@@ -35,9 +38,9 @@ impl Module for DirectoryListingDisclosure {
 
 #[async_trait]
 impl HttpModule for DirectoryListingDisclosure {
+    #[instrument(name = "check", level = "info", fields(module = self.name()), skip_all)]
     async fn scan(&self, http_client: &Client, endpoint: &str) -> Result<Option<HttpFinding>> {
-        info!("{:12} - {:?}", "HTTP REQUEST", endpoint);
-        let res = http_client.get(endpoint).send().await?;
+        let res = http_request(&http_client, endpoint).await?;
 
         if !res.status().is_success() {
             return Ok(None);
