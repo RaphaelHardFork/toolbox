@@ -1,7 +1,7 @@
 use super::{HttpFinding, HttpModule};
 use crate::{modules::Module, Result};
 use async_trait::async_trait;
-use lazy_regex::{regex, Lazy, Regex};
+use lazy_regex::regex;
 use reqwest::Client;
 use tracing::info;
 

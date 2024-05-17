@@ -1,20 +1,19 @@
 use crate::{
     dns,
-    model::{ensure_dir, export_to_json, export_to_markdown, Port, Subdomain},
+    model::{ensure_dir, export_to_json, export_to_markdown, Subdomain},
     modules::{self, http::HttpModule},
     ports, Result,
 };
 use futures::{stream, StreamExt};
-use hickory_resolver::proto::rr::domain;
 use reqwest::Client;
 use std::{
     collections::HashSet,
     path::Path,
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, info_span, instrument, span, trace, Instrument};
+use tracing::{debug, error, info, instrument, trace};
 
 // timeouts
 const HTTP_REQUEST_TIMEOUT_MS: u64 = 7500;

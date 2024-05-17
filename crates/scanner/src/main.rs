@@ -8,24 +8,15 @@ mod scan;
 pub use error::{Error, Result};
 
 use clap::{Arg, Command};
-use futures::{stream, StreamExt};
-use model::Subdomain;
-use reqwest::Client;
 use scan::scan;
 use std::env;
-use std::time::{Duration, Instant};
-use tracing::{debug, error, info};
-use tracing_subscriber::fmt::format::{FmtSpan, Format};
+use tracing::{debug, error};
+use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::EnvFilter;
 
 // timeouts
-const HTTP_REQUEST_TIMEOUT_MS: u64 = 10000;
 pub const SOCKET_CON_TIMEOUT_MS: u64 = 3000;
 pub const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
-
-// concurrencies values
-const PORTS_CONCURRENCY: usize = 200;
-const SUBDOMAINS_CONCURRENCY: usize = 100;
 
 fn main() -> Result<()> {
     // setup tracing
@@ -56,7 +47,7 @@ fn main() -> Result<()> {
     match cli.subcommand() {
         Some(("scan", args)) => {
             if let Some(target) = args.get_one::<String>("target") {
-                scan(target);
+                let _ = scan(target);
             }
         }
 

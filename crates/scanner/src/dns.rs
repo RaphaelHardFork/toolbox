@@ -2,7 +2,7 @@ use crate::model::Subdomain;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::TokioAsyncResolver;
 use std::{sync::Arc, time::Duration};
-use tracing::{debug, trace};
+use tracing::debug;
 
 const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
 

@@ -1,5 +1,5 @@
 use crate::{modules::http::HttpFinding, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::to_string_pretty;
 use std::fmt::Write as FmtWrite;
 use std::fs::{self, File};

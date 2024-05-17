@@ -1,8 +1,6 @@
 pub mod http;
 mod subdomains;
 
-use std::time::Instant;
-
 use self::http::HttpModule;
 use self::subdomains::SubdomainModule;
 use crate::modules::http::cve_2017_9506::Cve2017_9506;
@@ -21,9 +19,8 @@ use crate::modules::http::prometheus_unauth_access::PrometheusUnauthenticatedAcc
 use crate::modules::http::traefik_unauth_access::TraefikUnauthenticatedAccess;
 use crate::modules::subdomains::{crtsh::CrtSh, web_archive::WebArchive};
 use crate::{Error, Result};
-use async_trait::async_trait;
 use reqwest::{Client, Response};
-use tracing::{debug, error, info, info_span, instrument, span, Instrument};
+use tracing::{debug, error, info, instrument};
 
 pub trait Module {
     fn name(&self) -> String;

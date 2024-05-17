@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, instrument, trace};
 
 // region:        --- Module info
 
