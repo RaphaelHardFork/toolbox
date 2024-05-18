@@ -23,13 +23,8 @@ const SUBDOMAINS_CONCURRENCY: usize = 20;
 
 #[tokio::main]
 #[instrument(name = "scan", level = "info", skip_all)]
-pub async fn scan(target: &str) -> Result<()> {
+pub async fn scan(target: &str) -> Result<Vec<Subdomain>> {
     trace!("Start scan on {}", target);
-
-    // create output file informations
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let filename = format!("{}", timestamp);
-    info!("Scanning {} (run-{})", target, timestamp);
 
     // create http client
     let http_timeout = Duration::from_millis(HTTP_REQUEST_TIMEOUT_MS);
@@ -38,20 +33,11 @@ pub async fn scan(target: &str) -> Result<()> {
 
     // scan core logic
     let subdomains = scan_subdomains(&http_client, target).await?;
+    return Ok(subdomains);
     let mut subdomains = scan_ports(subdomains).await;
     scan_vulnerabilities(&http_client, &mut subdomains).await;
 
-    // export results to files
-    let output_dir = format!("output/scanner/{}", target);
-    ensure_dir(output_dir.as_ref())?;
-    let json_path = Path::new(&output_dir)
-        .join(&filename)
-        .with_extension("json");
-    let md_path = Path::new(&output_dir).join(filename).with_extension("md");
-    export_to_json(&subdomains, &json_path)?;
-    export_to_markdown(&subdomains, &target, &md_path)?;
-
-    Ok(())
+    Ok(subdomains)
 }
 
 #[instrument(name = "subdomains", level = "info", skip_all)]

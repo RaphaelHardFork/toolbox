@@ -13,15 +13,17 @@ tokio-stream = "0.1.15"
 clap = { version = "4.5.4", features = ["cargo"] }
 # -- Http requests
 reqwest = { version = "0.12.4", features = ["json"] }
-# -- resolve DNS
+# -- Logs
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2.3"
+# -- Resolve DNS
 hickory-resolver = "0.24.1"
 # -- Serialize
 serde = { version = "1.0.200", features = ["derive"] }
 serde_json = "1.0.117"
 # -- Utils
 derive_more = { version = "0.99.17", features = ["from"] }
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 lazy-regex = "3.1.0"
 time = { version = "0.3.36", features = ["formatting", "parsing", "serde"] }
 
