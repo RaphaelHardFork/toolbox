@@ -1,6 +1,5 @@
-use std::io;
-
 use derive_more::From;
+use std::io;
 
 pub type Result<T> = core::result::Result<T, Error>;
 

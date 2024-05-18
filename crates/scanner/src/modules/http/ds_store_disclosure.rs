@@ -1,11 +1,9 @@
 use super::{HttpFinding, HttpModule};
-use crate::{
-    modules::{http_request, Module},
-    Result,
-};
+use crate::modules::{http_request, Module};
+use crate::Result;
 use async_trait::async_trait;
 use reqwest::Client;
-use tracing::{info, instrument};
+use tracing::instrument;
 
 // region:        --- Module info
 

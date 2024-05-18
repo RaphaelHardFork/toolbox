@@ -1,10 +1,9 @@
 use crate::model::Subdomain;
+use crate::scan::RESOLVE_DNS_TIMEOUT_MS;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::TokioAsyncResolver;
 use std::{sync::Arc, time::Duration};
 use tracing::debug;
-
-const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
 
 pub type DnsResolver = Arc<TokioAsyncResolver>;
 

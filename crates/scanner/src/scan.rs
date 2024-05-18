@@ -1,25 +1,28 @@
-use crate::{
-    dns,
-    model::{ensure_dir, export_to_json, export_to_markdown, Subdomain},
-    modules::{self, http::HttpModule},
-    ports, Result,
-};
+use crate::modules::{self, http::HttpModule};
+use crate::Result;
+use crate::{dns, model::Subdomain, ports};
 use futures::{stream, StreamExt};
 use reqwest::Client;
-use std::{
-    collections::HashSet,
-    path::Path,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, instrument, trace};
 
+// region:        --- Constants
+
 // timeouts
 const HTTP_REQUEST_TIMEOUT_MS: u64 = 7500;
+pub const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
+pub const SOCKET_CON_TIMEOUT_MS: u64 = 3000;
 
 // concurrency numbers
-const SUBDOMAINS_CONCURRENCY: usize = 20;
+const SUBDOMAINS_ENUMERATION_CONCURRENCY: usize = 20;
+const RESOLVE_DNS_CONCURRENCY: usize = 100;
+const DOMAIN_PORT_CONCURRENCY: usize = 200;
+const VULNERABILITIES_CONCURRENCY: usize = 20;
+
+// endregion:     --- Constants
+
+// region:        --- Scan main function
 
 #[tokio::main]
 #[instrument(name = "scan", level = "info", skip_all)]
@@ -33,12 +36,15 @@ pub async fn scan(target: &str) -> Result<Vec<Subdomain>> {
 
     // scan core logic
     let subdomains = scan_subdomains(&http_client, target).await?;
-    return Ok(subdomains);
     let mut subdomains = scan_ports(subdomains).await;
     scan_vulnerabilities(&http_client, &mut subdomains).await;
 
     Ok(subdomains)
 }
+
+// endregion:     --- Scan main function
+
+// region:        --- Scan subfunctions
 
 #[instrument(name = "subdomains", level = "info", skip_all)]
 async fn scan_subdomains(http_client: &Client, target: &str) -> Result<Vec<Subdomain>> {
@@ -55,7 +61,7 @@ async fn scan_subdomains(http_client: &Client, target: &str) -> Result<Vec<Subdo
                 }
             }
         })
-        .buffer_unordered(SUBDOMAINS_CONCURRENCY)
+        .buffer_unordered(SUBDOMAINS_ENUMERATION_CONCURRENCY)
         .filter_map(|domain| async { domain })
         .collect::<Vec<Vec<String>>>()
         .await
@@ -92,7 +98,7 @@ async fn resolve_subdomains(subdomains: Vec<Subdomain>) -> Vec<Subdomain> {
     let dns_resolver = dns::new_resolver();
     let subdomains: Vec<Subdomain> = stream::iter(subdomains.into_iter())
         .map(|domain| dns::resolves(&dns_resolver, domain))
-        .buffer_unordered(100)
+        .buffer_unordered(RESOLVE_DNS_CONCURRENCY)
         .filter_map(|domain| async move { domain })
         .collect()
         .await;
@@ -104,7 +110,7 @@ async fn resolve_subdomains(subdomains: Vec<Subdomain>) -> Vec<Subdomain> {
 #[instrument(name = "ports", level = "info", skip_all)]
 async fn scan_ports(subdomains: Vec<Subdomain>) -> Vec<Subdomain> {
     stream::iter(subdomains.into_iter())
-        .map(|domain| ports::scan_ports(200, domain))
+        .map(|domain| ports::scan_ports(DOMAIN_PORT_CONCURRENCY, domain))
         .buffer_unordered(1)
         .collect()
         .await
@@ -142,7 +148,7 @@ async fn scan_vulnerabilities(http_client: &Client, subdomains: &mut Vec<Subdoma
 
     // scan
     stream::iter(targets.into_iter())
-        .for_each_concurrent(20, |(module, target, i, j)| {
+        .for_each_concurrent(VULNERABILITIES_CONCURRENCY, |(module, target, i, j)| {
             let http_client = &http_client;
             let subdomains = Arc::clone(&subdomains);
             async move {
@@ -163,3 +169,5 @@ async fn scan_vulnerabilities(http_client: &Client, subdomains: &mut Vec<Subdoma
         })
         .await;
 }
+
+// endregion:     --- Scan subfunctions

@@ -8,27 +8,17 @@ mod scan;
 pub use error::{Error, Result};
 
 use clap::{Arg, Command};
+use model::{ensure_dir, export_to_json, export_to_markdown};
 use scan::scan;
+use std::env;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{env, io};
-use tracing::instrument::WithSubscriber;
-use tracing::{debug, error, info, subscriber};
-use tracing_appender::non_blocking;
+use tracing::{error, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
-use tracing_subscriber::{prelude::*, Registry};
-
-use crate::model::{ensure_dir, export_to_json, export_to_markdown};
-
-// timeouts
-pub const SOCKET_CON_TIMEOUT_MS: u64 = 3000;
-pub const RESOLVE_DNS_TIMEOUT_MS: u64 = 4000;
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
     let cli = Command::new(clap::crate_name!())
