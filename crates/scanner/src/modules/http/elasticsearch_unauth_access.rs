@@ -28,7 +28,7 @@ impl Module for ElasticsearchUnauthenticatedAccess {
 #[derive(Debug, Serialize, Deserialize)]
 struct ElasticsearchInfo {
     pub name: String,
-    pub clustur_name: String,
+    pub cluster_name: String,
     pub tagline: String,
 }
 
