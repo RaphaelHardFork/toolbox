@@ -1,7 +1,12 @@
 [workspace.lints.rust]
 unsafe_code = "forbid"
-# unused = "allow"       # For exploratory dev.
+unused = "allow"       # For exploratory dev.
 
 [workspace]
 resolver = "2"
-members = ["crates/scanner", "crates/simple-scanner", "crates/sha1-cracker"]
+members = [
+  "crates/scanner",
+  "crates/simple-scanner",
+  "crates/sha1-cracker",
+  "crates/crawler",
+]
