@@ -8,6 +8,12 @@ pub enum Error {
     ParseFloat(std::num::ParseFloatError),
 
     #[from]
+    SystemTime(std::time::SystemTimeError),
+
+    #[from]
+    File(std::io::Error),
+
+    #[from]
     Reqwest(reqwest::Error),
 }
 

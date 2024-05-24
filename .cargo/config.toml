@@ -1,3 +1,3 @@
 [env]
 
-RUST_LOG = "scanner=debug"
+RUST_LOG = "scanner=debug,crawler=info"

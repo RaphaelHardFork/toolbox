@@ -1,14 +1,11 @@
 use super::Spider;
-use crate::Result;
+use crate::{Error, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use select::document::Document;
 use select::predicate::{self, Attr, Class, Element, Name, Predicate, Text};
 use std::time::Duration;
-
-pub struct CveDetailsSpider {
-    http_client: Client,
-}
+use tracing::{debug, error, info, instrument, trace};
 
 #[derive(Debug, Clone, Default)]
 pub struct Cve {
@@ -36,6 +33,10 @@ pub struct Cve {
     references: Vec<String>,
 }
 
+pub struct CveDetailsSpider {
+    http_client: Client,
+}
+
 impl CveDetailsSpider {
     pub fn new() -> Self {
         let http_timeout = Duration::from_millis(6000);
@@ -46,63 +47,39 @@ impl CveDetailsSpider {
 
         Self { http_client }
     }
-}
 
-impl CveDetailsSpider {
-    fn normalize_url(&self, url: &str) -> String {
-        match url.trim() {
-            url_str if url.starts_with("//www.cvedetails.com") => format!("https:{}", url_str),
-            url_str if url.starts_with("/") => format!("https://www.cvedetails.com{}", url_str),
-            _ => url.to_string(),
+    #[instrument(name = "http_req", level = "info", skip_all)]
+    async fn http_request(&self, url: &str) -> Result<String> {
+        info!("Sending request");
+        match self.http_client.get(url).send().await {
+            Ok(res) => {
+                info!("Receive with status: {}", res.status());
+                debug!("Response: {:?}", res);
+                let text_res = res.text().await?;
+                trace!("HTML response: {:?}", text_res);
+                Ok(text_res)
+            }
+            Err(err) => {
+                error!("Reason: {}", err);
+                Err(Error::Reqwest(err))
+            }
         }
     }
-}
 
-fn normalize_url(url: &str) -> String {
-    match url.trim() {
-        url_str if url.starts_with("//www.cvedetails.com") => format!("https:{}", url_str),
-        url_str if url.starts_with("/") => format!("https://www.cvedetails.com{}", url_str),
-        _ => url.to_string(),
-    }
-}
-
-#[async_trait]
-impl Spider for CveDetailsSpider {
-    type Item = Cve;
-
-    fn name(&self) -> String {
-        "cve details".to_string()
-    }
-
-    fn start_urls(&self) -> Vec<String> {
-        vec!["https://www.cvedetails.com/vulnerability-list/vulnerabilities.html".to_string()]
-    }
-
-    async fn scrape(&self, url: String) -> Result<(Vec<Self::Item>, Vec<String>)> {
-        // http request
-        println!(">> visiting: {:?}", url);
-        let res = self
-            .http_client
-            .get(url.clone())
-            .send()
-            .await?
-            .text()
-            .await?;
-        let document = Document::from(res.as_str());
-
-        // region:        --- Scrap links
-
-        // find each CVE link
+    #[instrument(name = "pages", level = "info", skip_all)]
+    fn scrape_pages(&self, document: &Document) -> Vec<String> {
         let mut cve_links: Vec<String> = document
             .find(Attr("id", "searchresults").descendant(Attr("data-tsvfield", "cveinfo")))
             .filter_map(|n| {
                 n.find(Attr("data-tsvfield", "cveId").descendant(Name("a")))
                     .next()
-                    .unwrap()
+                    .unwrap() // FIXME remove unwrap
                     .attr("href")
             })
             .map(normalize_url)
             .collect();
+        info!("{} CVE links", cve_links.len());
+        debug!("{:?}", cve_links);
 
         // find links to others pages
         let next_pages_links: Vec<String> = document
@@ -110,15 +87,18 @@ impl Spider for CveDetailsSpider {
             .filter_map(|n| n.attr("href"))
             .map(normalize_url)
             .collect();
+        info!("{} pages links", next_pages_links.len());
+        debug!("{:?}", next_pages_links);
 
         cve_links.extend(next_pages_links);
+        cve_links
+    }
 
-        // endregion:     --- Scrap links
-
-        // region:        --- Scrap CVE
-
+    #[instrument(name = "cve", level = "info", skip_all)]
+    fn scrape_cve(&self, url: &str, document: &Document) -> Vec<Cve> {
         let mut cve = Cve::default();
-        cve.url = url.clone();
+
+        cve.url = url.to_string();
 
         // extract name
         if let Some(title) = document
@@ -127,7 +107,8 @@ impl Spider for CveDetailsSpider {
         {
             cve.name = title.text()
         } else {
-            return Ok((vec![], cve_links));
+            info!("Not a CVE page");
+            return vec![];
         }
 
         // extract dates
@@ -203,13 +184,51 @@ impl Spider for CveDetailsSpider {
             .collect();
         cve.references = references;
 
-        // endregion:     --- Scrap CVE
+        info!("{} created", cve.name);
+        debug!("{:?}", cve);
 
-        Ok((vec![cve], cve_links))
+        vec![cve]
+    }
+}
+
+#[async_trait]
+impl Spider for CveDetailsSpider {
+    type Item = Cve;
+
+    fn name(&self) -> String {
+        "cve details".to_string()
     }
 
+    fn start_urls(&self) -> Vec<String> {
+        vec!["https://www.cvedetails.com/vulnerability-list/vulnerabilities.html".to_string()]
+    }
+
+    #[instrument(name = "scraping", level = "info", fields(url = url), skip_all)]
+    async fn scrape(&self, url: String) -> Result<(Vec<Self::Item>, Vec<String>)> {
+        let res = self.http_request(&url).await?;
+        let document = Document::from(res.as_str());
+
+        let links = self.scrape_pages(&document);
+        let cves = self.scrape_cve(&url, &document);
+
+        Ok((cves, links))
+    }
+
+    #[instrument(name = "processing", level = "info", skip_all)]
     async fn process(&self, item: Self::Item) -> Result<()> {
-        println!(">> processing {:?}", item);
+        info!("{:?}", item);
         Ok(())
     }
 }
+
+// region:        --- Utils
+
+fn normalize_url(url: &str) -> String {
+    match url.trim() {
+        url_str if url.starts_with("//www.cvedetails.com") => format!("https:{}", url_str),
+        url_str if url.starts_with("/") => format!("https://www.cvedetails.com{}", url_str),
+        _ => url.to_string(),
+    }
+}
+
+// endregion:     --- Utils

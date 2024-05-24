@@ -5,6 +5,7 @@ use std::sync::{atomic::AtomicUsize, Arc};
 use std::{collections::HashSet, time::Duration};
 use tokio::sync::{mpsc, Barrier};
 use tokio::time::sleep;
+use tracing::{error, info, instrument, warn};
 
 pub struct Crawler {
     delay: Duration,
@@ -31,7 +32,10 @@ impl Crawler {
 // endregion:     --- Constructors
 
 impl Crawler {
+    #[instrument(name = "control_loop", level = "info", skip_all)]
     pub async fn run<T: Send + 'static>(&self, spider: Arc<dyn Spider<Item = T>>) {
+        info!("Start run with spider: {}", spider.name());
+
         // queue capacity
         let crawling_queue_capacity = self.crawling_concurrency * 400;
         let processing_queue_capacity = self.processing_concurrency * 10;
@@ -68,13 +72,13 @@ impl Crawler {
         );
 
         // control loop
-        println!(">> start control loop");
+        info!("Launching");
         loop {
             // when receive new urls
             if let Some((visited_url, mut new_urls)) = new_urls_rx.try_recv().ok() {
                 visited_urls.insert(visited_url);
 
-                println!(">> news url: {:?}", new_urls.len());
+                info!("{} urls arrived", new_urls.len());
 
                 // if new_urls.len() > 5 {
                 //     // DEV MODE
@@ -84,11 +88,11 @@ impl Crawler {
                 for url in new_urls {
                     if !visited_urls.contains(&url) {
                         visited_urls.insert(url.clone());
-                        println!(">> queuing: {:?}", url);
+                        info!("Queuing: {}", url);
                         let _ = urls_to_visit_tx.send(url).await;
                     } else {
-                        println!(">> already visited: {:?}", url);
-                        break; // DEV MODE
+                        warn!("Already visited {:?} (should stop in dev mode)", url);
+                        break;
                     }
                 }
             }
@@ -103,13 +107,15 @@ impl Crawler {
 
             sleep(Duration::from_millis(5)).await;
         }
+        info!("Exited");
 
-        println!(">> crawler: control loop exited");
         drop(urls_to_visit_tx);
+        info!("Waiting barrier");
         barrier.wait().await;
-        println!(">> control loop barrier passed");
+        info!("Finalized");
     }
 
+    #[instrument(name = "processors", level = "info", skip_all)]
     fn launch_processors<T: Send + 'static>(
         &self,
         spider: Arc<dyn Spider<Item = T>>,
@@ -118,7 +124,8 @@ impl Crawler {
     ) {
         let concurrency = self.processing_concurrency;
 
-        println!(">> launch processor");
+        info!("Launching");
+
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(items_rx)
                 .for_each_concurrent(concurrency, |item| async {
@@ -127,11 +134,13 @@ impl Crawler {
                 .await;
 
             // wait here others barrier before continuing
+            info!("Waiting barrier");
             barrier.wait().await;
-            println!("launch_processor barrier ended");
+            info!("Finalized");
         });
     }
 
+    #[instrument(name = "scrapers", level = "info", skip_all)]
     fn launch_scrapers<T: Send + 'static>(
         &self,
         spider: Arc<dyn Spider<Item = T>>,
@@ -144,14 +153,14 @@ impl Crawler {
         let concurrency = self.crawling_concurrency;
         let delay = self.delay;
 
-        println!(">> launch scrapers");
+        info!("Launching");
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(urls_to_visit)
                 .for_each_concurrent(concurrency, |queued_url| {
                     let queued_url = queued_url.clone();
                     async {
-                        println!(">> increment active spider");
-                        active_spiders.fetch_add(1, Ordering::SeqCst);
+                        let current = active_spiders.fetch_add(1, Ordering::SeqCst);
+                        info!("Active spider ({} active)", current + 1);
 
                         let mut urls = Vec::new();
 
@@ -160,17 +169,18 @@ impl Crawler {
                             .scrape(queued_url.clone())
                             .await
                             .map_err(|err| {
-                                println!(">>{:?}", err);
+                                error!("Reason: {:?}", err);
                                 err
                             })
                             .ok();
 
                         // send items if any
                         if let Some((items, new_urls)) = res {
-                            println!(
-                                ">> scraper result: items: {:?}, new urls: {:.}",
+                            info!(
+                                "Found {} items & {} new_urls from {:?}",
                                 items.len(),
-                                new_urls.len()
+                                new_urls.len(),
+                                queued_url
                             );
                             for item in items {
                                 let _ = items_tx.send(item).await;
@@ -183,16 +193,17 @@ impl Crawler {
 
                         // wait and close active spider
                         sleep(delay).await;
-                        println!(">> decrement active spider");
-                        active_spiders.fetch_sub(1, Ordering::SeqCst);
+                        let now = active_spiders.fetch_sub(1, Ordering::SeqCst);
+                        info!("Desactive spider ({} active)", now - 1);
                     }
                 })
                 .await;
 
             // drop items receiver before waiting for other barrier
             drop(items_tx);
+            info!("Waiting barrier");
             barrier.wait().await;
-            println!(">> launch_scrapper ended");
+            info!("Finalized");
         });
     }
 }
