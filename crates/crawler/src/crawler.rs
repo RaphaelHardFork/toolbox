@@ -11,6 +11,8 @@ pub struct Crawler {
     delay: Duration,
     crawling_concurrency: usize,
     processing_concurrency: usize,
+    barrier: Arc<Barrier>,
+    active_spiders: Arc<AtomicUsize>,
 }
 
 // region:        --- Constructors
@@ -25,6 +27,8 @@ impl Crawler {
             delay,
             crawling_concurrency,
             processing_concurrency,
+            barrier: Arc::new(Barrier::new(3)),
+            active_spiders: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
@@ -42,15 +46,11 @@ impl Crawler {
 
         // create counters
         let mut visited_urls: HashSet<String> = HashSet::new();
-        let active_spiders = Arc::new(AtomicUsize::new(0));
 
         // create channels
         let (urls_to_visit_tx, urls_to_visit_rx) = mpsc::channel(crawling_queue_capacity);
         let (items_tx, items_rx) = mpsc::channel(processing_queue_capacity);
         let (new_urls_tx, mut new_urls_rx) = mpsc::channel(crawling_queue_capacity);
-
-        // set a barrier limit
-        let barrier = Arc::new(Barrier::new(3));
 
         // insert the first urls
         for url in spider.start_urls() {
@@ -59,7 +59,7 @@ impl Crawler {
         }
 
         // send outputs to processing
-        self.launch_processors(spider.clone(), items_rx, barrier.clone());
+        self.launch_processors(spider.clone(), items_rx);
 
         // send urls to visit and queue items & new urls
         self.launch_scrapers(
@@ -67,8 +67,6 @@ impl Crawler {
             urls_to_visit_rx,
             new_urls_tx.clone(),
             items_tx,
-            active_spiders.clone(),
-            barrier.clone(),
         );
 
         // control loop
@@ -99,7 +97,7 @@ impl Crawler {
 
             if new_urls_tx.capacity() == self.crawling_concurrency * 400
                 && urls_to_visit_tx.capacity() == self.crawling_concurrency * 400
-                && active_spiders.load(Ordering::SeqCst) == 0
+                && self.active_spiders.load(Ordering::SeqCst) == 0
             {
                 // no more work
                 break;
@@ -111,7 +109,7 @@ impl Crawler {
 
         drop(urls_to_visit_tx);
         info!("Waiting barrier");
-        barrier.wait().await;
+        self.barrier.wait().await;
         info!("Finalized");
     }
 
@@ -120,9 +118,9 @@ impl Crawler {
         &self,
         spider: Arc<dyn Spider<Item = T>>,
         items_rx: mpsc::Receiver<T>,
-        barrier: Arc<Barrier>,
     ) {
         let concurrency = self.processing_concurrency;
+        let barrier = self.barrier.clone();
 
         info!("Launching");
 
@@ -147,11 +145,11 @@ impl Crawler {
         urls_to_visit: mpsc::Receiver<String>,
         new_urls_tx: mpsc::Sender<(String, Vec<String>)>,
         items_tx: mpsc::Sender<T>,
-        active_spiders: Arc<AtomicUsize>,
-        barrier: Arc<Barrier>,
     ) {
         let concurrency = self.crawling_concurrency;
         let delay = self.delay;
+        let barrier = self.barrier.clone();
+        let active_spiders = self.active_spiders.clone();
 
         info!("Launching");
         tokio::spawn(async move {
