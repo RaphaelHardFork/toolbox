@@ -1,34 +1,39 @@
-use std::time::Duration;
-
+use super::Spider;
+use crate::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 use select::document::Document;
 use select::predicate::{self, Attr, Class, Element, Name, Predicate, Text};
-
-use crate::Result;
-
-use super::Spider;
+use std::time::Duration;
 
 pub struct CveDetailsSpider {
     http_client: Client,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Cve {
+    // info
     name: String,
     url: String,
-    cwe_id: Option<String>,
-    cwe_url: Option<String>,
-    vulnerability_type: String,
     publish_date: String,
     update_date: String,
-    score: f32,
-    access: String,
+    // scores
+    base_score: String,
+    exploitability_score: String,
+    impact_score: String,
+    severity: String,
+    score_source: String,
+    // CVSS vector
+    attack_vector: String,
     complexity: String,
-    authentication: String,
+    privileges: String,
+    interaction: String,
+    scope: String,
     confidentiality: String,
     integrity: String,
     availability: String,
+    // references
+    references: Vec<String>,
 }
 
 impl CveDetailsSpider {
@@ -76,8 +81,16 @@ impl Spider for CveDetailsSpider {
     async fn scrape(&self, url: String) -> Result<(Vec<Self::Item>, Vec<String>)> {
         // http request
         println!(">> visiting: {:?}", url);
-        let res = self.http_client.get(url).send().await?.text().await?;
+        let res = self
+            .http_client
+            .get(url.clone())
+            .send()
+            .await?
+            .text()
+            .await?;
         let document = Document::from(res.as_str());
+
+        // region:        --- Scrap links
 
         // find each CVE link
         let mut cve_links: Vec<String> = document
@@ -100,141 +113,99 @@ impl Spider for CveDetailsSpider {
 
         cve_links.extend(next_pages_links);
 
-        // Strucure data into items
-        let mut items = Vec::new();
+        // endregion:     --- Scrap links
+
+        // region:        --- Scrap CVE
+
+        let mut cve = Cve::default();
+        cve.url = url.clone();
 
         // extract name
-        let name = if let Some(title) = document
+        if let Some(title) = document
             .find(Attr("id", "cvedetails-title-div").descendant(Name("a")))
             .next()
         {
-            title.text()
+            cve.name = title.text()
         } else {
-            return Ok((items, cve_links));
-        };
-        println!("Scrap a CVE page");
-        println!("{:?}", name);
+            return Ok((vec![], cve_links));
+        }
 
         // extract dates
-        let dates: Vec<String> = document
+        document
             .find(Name("main").descendant(Name("span")))
             .filter_map(|span| span.parent())
-            .filter_map(|div| {
+            .for_each(|div| {
                 if div.text().contains("Published") {
-                    Some(div.text().replace("Published", "").trim().to_string())
+                    cve.publish_date = div.text().replace("Published", "").trim().to_string();
                 } else if div.text().contains("Updated") {
-                    Some(div.text().replace("Updated", "").trim().to_string())
-                } else {
-                    None
+                    cve.update_date = div.text().replace("Updated", "").trim().to_string()
                 }
-            })
-            .collect();
+            });
 
-        println!("{:?}", dates);
-
-        // extract details
-        let mut details_node = document
+        // extract CVSS details
+        document
             .find(Attr("id", "cvss_details_row_1").descendant(Name("div")))
-            .next()
-            .unwrap()
-            .children();
+            .filter(|n| !n.text().contains('\t'))
+            .for_each(|div| match div.text() {
+                v if v.contains("Attack Vector") => {
+                    cve.attack_vector = v.replace("Attack Vector:", "").trim().to_string()
+                }
+                v if v.contains("Attack Complexity") => {
+                    cve.complexity = v.replace("Attack Complexity:", "").trim().to_string()
+                }
+                v if v.contains("Privileges Required") => {
+                    cve.privileges = v.replace("Privileges Required:", "").trim().to_string()
+                }
+                v if v.contains("User Interaction") => {
+                    cve.interaction = v.replace("User Interaction:", "").trim().to_string()
+                }
+                v if v.contains("Scope") => cve.scope = v.replace("Scope:", "").trim().to_string(),
+                v if v.contains("Confidentiality") => {
+                    cve.confidentiality = v.replace("Confidentiality:", "").trim().to_string()
+                }
+                v if v.contains("Integrity") => {
+                    cve.integrity = v.replace("Integrity:", "").trim().to_string()
+                }
+                v if v.contains("Availability") => {
+                    cve.availability = v.replace("Availability:", "").trim().to_string()
+                }
+                _ => {}
+            });
 
-        let attack_vector = details_node.find_map(|div| {
-            if div.text().contains("Attack Vector") {
-                Some(div.text().replace("Attack Vector:", "").trim().to_string())
-            } else {
-                None
-            }
-        });
+        // extract scores, severity & source
+        document
+            .find(Name("tbody").descendant(Name("td")))
+            .enumerate()
+            .for_each(|(i, td)| {
+                let td = td.text().replace("\n", "").replace("\t", "");
+                match i {
+                    i if i == 0 => cve.base_score = td,
+                    i if i == 1 => cve.severity = td,
+                    i if i == 3 => cve.exploitability_score = td,
+                    i if i == 4 => cve.impact_score = td,
+                    i if i == 5 => cve.score_source = td,
+                    _ => {}
+                }
+            });
 
-        println!("{:?}", attack_vector);
+        // extract references
+        let references: Vec<String> = document
+            .find(Class("cved-card").descendant(Name("li").descendant(Name("a"))))
+            .filter_map(|a| {
+                if let Some(ref_link) = a.attr("title") {
+                    if ref_link.contains("reference") {
+                        return a.attr("href");
+                    }
+                }
+                return None;
+            })
+            .map(String::from)
+            .collect();
+        cve.references = references;
 
-        println!("END CVE page");
+        // endregion:     --- Scrap CVE
 
-        // pub struct Cve {
-        //     cwe_id: Option<String>,
-        //     cwe_url: Option<String>,
-        //     vulnerability_type: String,
-        //     score: f32,
-        //     access: String,
-        //     complexity: String,
-        //     authentication: String,
-        //     confidentiality: String,
-        //     integrity: String,
-        //     availability: String,
-        // }
-
-        // let rows = document.find(Attr("id", "cvedetails-title-div").descendant(Class("srrowns")));
-        // for row in rows {
-        //     let mut columns = row.find(Name("td"));
-
-        //     let _ = columns.next();
-        //     let cve_link = columns.next().unwrap().find(Name("a")).next().unwrap();
-        //     let cve_name = cve_link.text().trim().to_string();
-        //     let cve_url = self.normalize_url(cve_link.attr("href").unwrap());
-
-        //     let cwe = columns
-        //         .next()
-        //         .unwrap()
-        //         .find(Name("a"))
-        //         .next()
-        //         .map(|cvec_link| {
-        //             (
-        //                 cvec_link.text().trim().to_string(),
-        //                 self.normalize_url(cvec_link.attr("href").unwrap()),
-        //             )
-        //         });
-
-        //     let _ = columns.next(); // # of exploits column
-
-        //     let vulnerability_type = columns.next().unwrap().text().trim().to_string();
-        //     let publish_date = columns.next().unwrap().text().trim().to_string();
-        //     let update_date = columns.next().unwrap().text().trim().to_string();
-        //     let score: f32 = columns
-        //         .next()
-        //         .unwrap()
-        //         .text()
-        //         .trim()
-        //         .to_string()
-        //         .parse()
-        //         .unwrap();
-
-        //     let _ = columns.next(); // Gained Access Level  column
-
-        //     let access = columns.next().unwrap().text().trim().to_string();
-        //     let complexity = columns.next().unwrap().text().trim().to_string();
-        //     let authentication = columns.next().unwrap().text().trim().to_string();
-        //     let confidentiality = columns.next().unwrap().text().trim().to_string();
-        //     let integrity = columns.next().unwrap().text().trim().to_string();
-        //     let availability = columns.next().unwrap().text().trim().to_string();
-
-        //     let cve = Cve {
-        //         name: cve_name,
-        //         url: cve_url,
-        //         cwe_id: cwe.as_ref().map(|cwe| cwe.0.clone()),
-        //         cwe_url: cwe.as_ref().map(|cwe| cwe.1.clone()),
-        //         vulnerability_type,
-        //         publish_date,
-        //         update_date,
-        //         score,
-        //         access,
-        //         complexity,
-        //         authentication,
-        //         confidentiality,
-        //         integrity,
-        //         availability,
-        //     };
-        //     items.push(cve);
-        // }
-
-        // // find links to others pages
-        // let next_pages_links: Vec<String> = document
-        //     .find(Attr("id", "pagingb").descendant(Name("a")))
-        //     .filter_map(|n| n.attr("href"))
-        //     .map(normalize_url)
-        //     .collect();
-
-        Ok((items, cve_links))
+        Ok((vec![cve], cve_links))
     }
 
     async fn process(&self, item: Self::Item) -> Result<()> {

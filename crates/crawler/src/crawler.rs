@@ -75,15 +75,12 @@ impl Crawler {
                 visited_urls.insert(visited_url);
 
                 println!(">> news url: {:?}", new_urls.len());
-                println!(">> news url_0: {:?}", new_urls[0]);
-                println!(">> news url_1: {:?}", new_urls[1]);
-                println!(">> news url_2: {:?}", new_urls[2]);
-                println!(">> news url_1383: {:?}", new_urls[1383]);
-                println!(">> news url_1384: {:?}", new_urls[1384]);
-                // break;
-                let mut new_urls: Vec<String> = new_urls[0..5].to_vec();
-                println!(">> news url: {:?}", new_urls.len());
-                let new_urls = vec!["https://www.cvedetails.com/cve/CVE-2024-35996/".to_string()];
+
+                // if new_urls.len() > 5 {
+                //     // DEV MODE
+                //     new_urls = new_urls[0..5].to_vec();
+                // }
+
                 for url in new_urls {
                     if !visited_urls.contains(&url) {
                         visited_urls.insert(url.clone());
@@ -91,6 +88,7 @@ impl Crawler {
                         let _ = urls_to_visit_tx.send(url).await;
                     } else {
                         println!(">> already visited: {:?}", url);
+                        break; // DEV MODE
                     }
                 }
             }
