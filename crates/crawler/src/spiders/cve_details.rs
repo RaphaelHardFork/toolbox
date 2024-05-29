@@ -3,7 +3,7 @@ use crate::{Error, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use select::document::Document;
-use select::predicate::{self, Attr, Class, Element, Name, Predicate, Text};
+use select::predicate::{Attr, Class, Name, Predicate};
 use std::time::Duration;
 use tracing::{debug, error, info, instrument, trace};
 

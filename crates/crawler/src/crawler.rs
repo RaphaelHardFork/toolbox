@@ -73,13 +73,13 @@ impl Crawler {
         info!("Launching");
         loop {
             // when receive new urls
-            if let Some((visited_url, mut new_urls)) = new_urls_rx.try_recv().ok() {
+            if let Some((visited_url, new_urls)) = new_urls_rx.try_recv().ok() {
                 visited_urls.insert(visited_url);
 
                 info!("{} urls arrived", new_urls.len());
 
                 // if new_urls.len() > 5 {
-                //     // DEV MODE
+                //     // DEV MODE (mut new_urls)
                 //     new_urls = new_urls[0..5].to_vec();
                 // }
 
@@ -89,8 +89,8 @@ impl Crawler {
                         info!("Queuing: {}", url);
                         let _ = urls_to_visit_tx.send(url).await;
                     } else {
-                        warn!("Already visited {:?} (should stop in dev mode)", url);
-                        break;
+                        info!("Already visited {:?}", url);
+                        // break; // DEV MODE
                     }
                 }
             }
