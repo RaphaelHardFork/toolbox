@@ -1,8 +1,8 @@
-
 use crate::Result;
 use async_trait::async_trait;
 
-pub mod cve_details; 
+pub mod cve_details;
+pub mod github;
 
 #[async_trait]
 pub trait Spider: Send + Sync {

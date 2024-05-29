@@ -8,6 +8,9 @@ pub enum Error {
     ParseFloat(std::num::ParseFloatError),
 
     #[from]
+    ParseUsize(std::num::ParseIntError),
+
+    #[from]
     SystemTime(std::time::SystemTimeError),
 
     #[from]

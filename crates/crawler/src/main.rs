@@ -24,7 +24,8 @@ async fn main() -> Result<()> {
 
     // --- start here ---
     let crawler = Crawler::new(Duration::from_millis(200), 2, 500);
-    let spider = Arc::new(spiders::cve_details::CveDetailsSpider::new());
+    // let spider = Arc::new(spiders::cve_details::CveDetailsSpider::new());
+    let spider = Arc::new(spiders::github::GitHubSpider::new());
     crawler.run(spider).await;
 
     Ok(())

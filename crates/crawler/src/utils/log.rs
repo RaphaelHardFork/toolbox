@@ -9,7 +9,7 @@ pub fn init_tracing_subscriber(save_logs_file: bool, output_dir: &Path, filename
     // base for the subscriber
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .with_span_events(FmtSpan::CLOSE);
+        .with_span_events(FmtSpan::NONE); // DEV
 
     if save_logs_file {
         let filename = format!("{}.log", filename);
@@ -35,7 +35,7 @@ pub fn init_tracing_subscriber(save_logs_file: bool, output_dir: &Path, filename
         let suscriber = subscriber
             // -- DEV
             .without_time()
-            .with_thread_ids(true)
+            // .with_thread_ids(true)
             // -- DEV
             .with_ansi(true)
             .with_file(false)
