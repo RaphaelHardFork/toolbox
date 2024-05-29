@@ -22,6 +22,10 @@ tracing-appender = "0.2.3"
 # -- Serialize
 serde = { version = "1.0.200", features = ["derive"] }
 serde_json = "1.0.117"
+# -- Web driver
+fantoccini = { version = "0.19", default-features = false, features = [
+  "rustls-tls",
+] }
 # -- Utils
 derive_more = { version = "0.99.17", features = ["from"] }
 lazy-regex = "3.1.0"

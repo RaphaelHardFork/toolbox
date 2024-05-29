@@ -18,6 +18,9 @@ pub enum Error {
 
     #[from]
     Reqwest(reqwest::Error),
+
+    #[from]
+    WebDriver(fantoccini::error::CmdError),
 }
 
 // region:    --- Error Boilerplate

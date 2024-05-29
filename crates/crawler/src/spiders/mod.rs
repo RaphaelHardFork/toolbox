@@ -3,6 +3,7 @@ use async_trait::async_trait;
 
 pub mod cve_details;
 pub mod github;
+pub mod quotes;
 
 #[async_trait]
 pub trait Spider: Send + Sync {
